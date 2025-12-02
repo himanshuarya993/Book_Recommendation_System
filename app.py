@@ -4,10 +4,10 @@ import numpy as np
 
 # ---- Load data with proper Windows paths ----
 try:
-    popular_df = pickle.load(open(r'D:\Book_Recommendation_System\popular.pkl', 'rb'))
-    pt = pickle.load(open(r'D:\Book_Recommendation_System\pt.pkl', 'rb'))
-    books = pickle.load(open(r'D:\Book_Recommendation_System\books.pkl', 'rb'))
-    similarity_scores = pickle.load(open(r'D:\Book_Recommendation_System\similarity_scores.pkl', 'rb'))
+    popular_df = pickle.load(open('popular.pkl', 'rb'))
+    pt = pickle.load(open('pt.pkl', 'rb'))
+    books = pickle.load(open('books.pkl', 'rb'))
+    similarity_scores = pickle.load(open('similarity_scores.pkl', 'rb'))
 except Exception as e:
     st.error(f"Error loading files: {e}")
     st.stop()  # stop execution if files not loaded
