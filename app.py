@@ -1,81 +1,102 @@
 import streamlit as st
 import pickle
 import numpy as np
+import os
+import requests
 
-# Set page config
-st.set_page_config(
-    page_title="Book Recommendation System",
-    page_icon="📚",
-    layout="wide"
-)
+# Function to download books.pkl from GitHub Release
+def download_books_pkl():
+    pkl_path = 'books.pkl'
+    if not os.path.exists(pkl_path):
+        st.info("📥 Downloading books.pkl from GitHub Release...")
+        try:
+            url = "https://github.com/himanshuarya993/Book_Recommendation_System/releases/download/v1.0/books.pkl"
+            response = requests.get(url, timeout=60)
+            if response.status_code == 200:
+                with open(pkl_path, 'wb') as f:
+                    f.write(response.content)
+                st.success("✅ Downloaded books.pkl successfully!")
+                return True
+            else:
+                st.error(f"Failed to download books.pkl (Status: {response.status_code})")
+                return False
+        except Exception as e:
+            st.error(f"Download error: {e}")
+            return False
+    return True
 
-# Load pickle files
+# ---- Load data with proper Windows paths ----
 try:
-    popular_df = pickle.load(open(r'D:\Book_Recommendation_System\popular.pkl', 'rb'))
-    pt = pickle.load(open(r'D:\Book_Recommendation_System\pt.pkl', 'rb'))
-    books = pickle.load(open(r'D:\Book_Recommendation_System\books.pkl', 'rb'))
-    similarity_scores = pickle.load(open(r'D:\Book_Recommendation_System\similarity_scores.pkl', 'rb'))
+    if not download_books_pkl():
+        st.stop()
+    
+    popular_df = pickle.load(open('popular.pkl', 'rb'))
+    pt = pickle.load(open('pt.pkl', 'rb'))
+    books = pickle.load(open('books.pkl', 'rb'))
+    similarity_scores = pickle.load(open('similarity_scores.pkl', 'rb'))
 except Exception as e:
     st.error(f"Error loading files: {e}")
-    st.stop()
+    st.stop()  # stop execution if files not loaded
 
-# Recommendation function
-def recommend(book_name):
-    try:
-        index = np.where(pt.index == book_name)[0][0]
-        similar_items = sorted(list(enumerate(similarity_scores[index])), 
-                              key=lambda x: x[1], reverse=True)[1:5]
-        
-        data = []
-        for i in similar_items:
-            item = []
-            temp_df = books[books['Book-Title'] == pt.index[i[0]]]
-            item.extend(list(temp_df.drop_duplicates('Book-Title')['Book-Title'].values))
-            item.extend(list(temp_df.drop_duplicates('Book-Title')['Book-Author'].values))
-            item.extend(list(temp_df.drop_duplicates('Book-Title')['Image-URL-M'].values))
-            data.append(item)
-        
-        return data
-    except Exception as e:
-        st.error(f"Error generating recommendations: {e}")
-        return []
+# ---- Streamlit Page Configuration ----
+st.set_page_config(page_title="Book Recommender", layout="wide")
+st.title("📚 Book Recommender System")
 
-# Main app
-st.title("📚 Book Recommendation System")
+# ---- Sidebar Menu ----
+menu = st.sidebar.selectbox("Menu", ["Home", "Recommend Books"])
 
-# Create tabs
-tab1, tab2 = st.tabs(["Popular Books", "Recommend for You"])
-
-# Tab 1: Popular Books
-with tab1:
-    st.header("Top 50 Popular Books")
+# ---- HOME PAGE ----
+if menu == "Home":
+    st.header("Top 50 Books")
     
-    cols = st.columns(4)
-    for idx, row in popular_df.iterrows():
-        col = cols[idx % 4]
-        with col:
-            st.image(row['Image-URL-M'], width=120)
-            st.write(f"**{row['Book-Title']}**")
-            st.caption(f"Author: {row['Book-Author']}")
-            st.caption(f"⭐ {row['avg_rating']:.2f} | 📊 {int(row['num_ratings'])} ratings")
+    # Display top 50 books
+    for i in range(min(50, len(popular_df))):
+        cols = st.columns([1, 2, 1, 1])  # adjust column width ratios
+        with cols[0]:
+            st.image(popular_df["Image-URL-M"].iloc[i], width=100)
+        with cols[1]:
+            st.write("**Book:**", popular_df["Book-Title"].iloc[i])
+            st.write("**Author:**", popular_df["Book-Author"].iloc[i])
+        with cols[2]:
+            st.write("**Votes:**", popular_df["num_ratings"].iloc[i])
+        with cols[3]:
+            st.write("**Rating:**", popular_df["avg_rating"].iloc[i])
 
-# Tab 2: Recommendations
-with tab2:
-    st.header("Get Personalized Recommendations")
+# ---- RECOMMENDATION PAGE ----
+if menu == "Recommend Books":
+    st.header("🔍 Find Similar Books")
     
-    book_list = pt.index.tolist()
-    selected_book = st.selectbox("Select a book:", book_list)
-    
-    if st.button("Recommend Similar Books"):
-        recommended_books = recommend(selected_book)
-        
-        if recommended_books:
-            cols = st.columns(2)
-            for idx, book_data in enumerate(recommended_books):
-                col = cols[idx % 2]
-                with col:
-                    st.image(book_data[2], width=150)
-                    st.write(f"**{book_data[0]}**")
-                    st.caption(f"Author: {book_data[1]}")
-        else:
-            st.warning("Could not generate recommendations for this book.")
+    user_input = st.text_input("Enter Book Name")
+
+    if st.button("Recommend"):
+        try:
+            # Find the book index in pivot table
+            index = np.where(pt.index == user_input)[0][0]
+            
+            # Get top 4 similar books
+            similar_items = sorted(
+                list(enumerate(similarity_scores[index])),
+                key=lambda x: x[1],
+                reverse=True
+            )[1:5]  # skip the book itself
+            
+            st.subheader("Recommended Books:")
+            
+            for i in similar_items:
+                temp_df = books[books['Book-Title'] == pt.index[i[0]]].drop_duplicates('Book-Title')
+                
+                title = temp_df['Book-Title'].values[0]
+                author = temp_df['Book-Author'].values[0]
+                img = temp_df['Image-URL-M'].values[0]
+                
+                cols = st.columns([1, 2])
+                with cols[0]:
+                    st.image(img, width=120)
+                with cols[1]:
+                    st.write(f"**{title}**")
+                    st.write(f"*{author}*")
+                    
+        except IndexError:
+            st.error("Book not found! Make sure the spelling matches your dataset.")
+        except Exception as e:
+            st.error(f"An error occurred: {e}")
